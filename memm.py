@@ -161,9 +161,12 @@ class MEMMTagger(object):
             for row, sent in trainsents.items():
                     history = None
                     untagged = untag(sent)
+                    # nltktags = pos_tag(untagged)
+                    # print nltktags
                     for (i, (word, tag)) in enumerate(sent):
                             x = dict()
                             feature = self.extract_feat(untagged, i, history, rare_word_cutoff)
+                            # feature['nltk_tag'] = nltktags[i]
                             x['features'] = feature
                             x['tag'] = tag
                             x['target_feat'] = self.phi(feature, tag)
@@ -226,7 +229,8 @@ class MEMMTagger(object):
 
                     # print W[: 100] 
                     curnorm = la.norm(W)
-                    # print 'SGD: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
+					# print 'SGD: iter', i
+					# print 'SGD: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
 
     def condProb(self, x):
             """
@@ -267,15 +271,18 @@ class MEMMTagger(object):
             for tag in self.tags.iterkeys():
                 mat[i][tag] = -1.0
                 back[i][tag] = "START"
-        
+        # nltktags = pos_tag(sentence) 
         for i in xrange(N):
             if i == 0:
                  features = self.extract_feat(sentence, i, None, rare_word_cutoff)
+                 # features['nltk_tag'] = nltktags[i]
                  k, prob = self.condProb(features)
                  mat[i] = prob
             else:
                 for tag in self.tags.iterkeys():
                     features = self.extract_feat(sentence, i, tag, rare_word_cutoff)
+                    # features['nltk_tag'] = nltktags[i]
+
                     _, prob = self.condProb(features) 
                     
                     for t in self.tags.iterkeys():
@@ -354,6 +361,7 @@ class MEMMTagger(object):
             self.gen_feats(trainsents, rare_word_cutoff, rare_feat_cutoff)		
             self.sgd(iterations, a0, alpha)
             # print self.featurenum
+            print 'Training done..'
 
 def gridsearch(tagger, trainset, testset):
 
@@ -374,7 +382,7 @@ def main():
 	devset = read_data("oct27.dev")
         testset = read_data("oct27.test")
         
-        tagger.train(trainset, 20)
+        tagger.train(trainset)
         tagger.test(devset)
         tagger.test(testset)
 
