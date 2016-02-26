@@ -205,32 +205,28 @@ class MEMMTagger(object):
 
 
     def sgd(self, iterations=10, a0=1, alpha=1):
-    
             self.M = len(self.featurenum) 
             self.W = zeros(self.M)
             W = self.W
 
             for i in xrange(iterations):
                     
-                    rate = a0 / (sqrt(i) + 1)
-                    prevnorm = la.norm(W)
-                    # log-likhood gradients
-                    for x in self.X:
-                            
-                        for (j, v) in self.expectation(x).iteritems():
-                                W[j] -= rate*v
-                        
-                        for j in x['target_feat']: # target feature indexes
-                                W[j] += rate	
-                    
-                    # regularizer gradient
-                    for k in xrange(len(W)):
-                            W[k] -= rate*alpha*W[k]
-
-                    # print W[: 100] 
-                    curnorm = la.norm(W)
-					# print 'SGD: iter', i
-					# print 'SGD: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
+				rate = a0 / (sqrt(i) + 1)
+				prevnorm = la.norm(W)
+				# log-likhood gradients
+				for x in self.X:
+						
+					for (j, v) in self.expectation(x).iteritems():
+							W[j] -= rate*v
+					
+					for j in x['target_feat']: # target feature indexes
+							W[j] += rate	
+				
+				# regularizer gradient
+				for k in xrange(len(W)):
+						W[k] -= rate*alpha*W[k]
+				curnorm = la.norm(W)
+				# print 'SGD: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
 
     def condProb(self, x):
             """
@@ -255,11 +251,8 @@ class MEMMTagger(object):
 
             return label, condprob
     
-    """
-    Find the most likely assignment to labels given the model using Viterbi algorithm
-    """
+    
     def argmax(self, sentence, rare_word_cutoff=5):
-
         N = len(sentence)
         K = len(self.tags)
 
@@ -305,18 +298,6 @@ class MEMMTagger(object):
         trace.reverse()
         return trace
 
-    def naive_tagsent(self, sentence, rare_word_cutoff=5):
-
-        trace = []
-        history = None
-        for i in xrange(len(sentence)):
-            features = self.extract_feat(sentence, i, history, rare_word_cutoff)
-            tag, condprob = self.condProb(features)    
-            history = tag
-            trace.append(tag)
-
-        return trace
-
     def test(self, testsents, clftype='argmax'):
         num = 0 
         numsent = corsent = numword = corword = 0.0
@@ -351,7 +332,7 @@ class MEMMTagger(object):
         tokenacc =  (corword / numword) * 100
         tweetacc = (corsent / numsent) * 100
         print 'Token Acc : ', tokenacc
-        print 'Sent Acc : ', tweetacc
+        print 'Tweet Acc : ', tweetacc
  
         return tokenacc, tweetacc
 
@@ -361,7 +342,6 @@ class MEMMTagger(object):
             self.gen_feats(trainsents, rare_word_cutoff, rare_feat_cutoff)		
             self.sgd(iterations, a0, alpha)
             # print self.featurenum
-            print 'Training done..'
 
 def gridsearch(tagger, trainset, testset):
 
@@ -376,17 +356,20 @@ def gridsearch(tagger, trainset, testset):
             tagger.test(testset)
 
 def main():
-	print "MEMM based POS-TAGGER"
+	print "------------- MEMM based POS-TAGGER -------------------- "
 	tagger = MEMMTagger()
 	trainset = read_data("oct27.train")	
 	devset = read_data("oct27.dev")
-        testset = read_data("oct27.test")
-        
-        tagger.train(trainset)
-        tagger.test(devset)
-        tagger.test(testset)
+	testset = read_data("oct27.test")
+	
+	tagger.train(trainset)
+	
+	print '----------- Dev Set Results ----------------- ' 
+	tagger.test(devset)
 
-        # gridsearch(tagger, trainset, devset)
+	print '----------- Test Set Results ---------------- '
+	
+	tagger.test(testset)
 
 
 if __name__ == "__main__":

@@ -199,8 +199,75 @@ class StructuredPerceptronTagger(object):
 			last = t;
 		return y
 
-	def train(self, trainset, iterations=10, a0=1, rare_word_cutoff=5, rare_feat_cutoff=5):
-		self.gen_feats(trainset, rare_word_cutoff, rare_feat_cutoff)		
+        def condProb(self, x):
+            enum = 0.0
+            eden = 0.0
+            condprob = defaultdict(float)
+            for tag in self.tags.iterkeys():
+                    active = self.getactivef( self.phi(x, tag) )
+                    enum = exp(self.innerProd(active))
+                    eden += enum
+                    condprob[tag] = enum
+
+            maxval = -2.0; label = "None"
+            for k in condprob.iterkeys():
+                    condprob[k] /= eden
+                    condprob[k] = condprob[k]
+                    if condprob[k] > maxval:
+                        maxval, label = condprob[k], k
+
+            return label, condprob
+
+        def viterbi(self, sentence, rare_word_cutoff=5):
+            N = len(sentence)
+            K = len(self.tags)
+
+            mat = dict()
+            back = dict()
+            for i in xrange(N):
+                mat[i] = defaultdict(float)
+                back[i] = dict()
+                for tag in self.tags.iterkeys():
+                    mat[i][tag] = -1.0
+                    back[i][tag] = "START"
+            # nltktags = pos_tag(sentence) 
+            for i in xrange(N):
+                if i == 0:
+                     features = self.extract_feat(sentence, i, None, rare_word_cutoff)
+                     # features['nltk_tag'] = nltktags[i]
+                     k, prob = self.condProb(features)
+                     mat[i] = prob
+                else:
+                    for tag in self.tags.iterkeys():
+                        features = self.extract_feat(sentence, i, tag, rare_word_cutoff)
+                        # features['nltk_tag'] = nltktags[i]
+
+                        _, prob = self.condProb(features) 
+                        
+                        for t in self.tags.iterkeys():
+                            if mat[i][t] < (prob[t] * mat[i - 1][tag]):
+                                mat[i][t] = prob[t] * mat[i - 1][tag]
+                                back[i][t] = tag
+
+            trace = []
+            maxval = -1.0
+            y = None
+            for tag in self.tags.iterkeys():
+                if mat[N - 1][tag] > maxval:
+                    maxval = mat[N - 1][tag]
+                    y = tag
+            
+            for i in reversed(xrange(N)):
+                trace.append(y)
+                y = back[i][y]
+
+            trace.reverse()
+            return trace
+        
+        
+        def train(self, trainset, iterations=10, a0=1, rare_word_cutoff=5, rare_feat_cutoff=5):
+		
+                self.gen_feats(trainset, rare_word_cutoff, rare_feat_cutoff)		
 		self.M = len(self.featurenum)
 		self.W = np.random.rand(self.M)
 		W = self.W
@@ -221,17 +288,44 @@ class StructuredPerceptronTagger(object):
 							W[featind] -= rate
 			curnorm = la.norm(W)
                         A = add(A, W)
-			print 'Train: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
+			# print 'Train: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
+
+	def train2(self, trainset, iterations=10, a0=1, rare_word_cutoff=5, rare_feat_cutoff=5):
+		
+                self.gen_feats(trainset, rare_word_cutoff, rare_feat_cutoff)		
+		self.M = len(self.featurenum)
+		self.W = np.random.rand(self.M)
+		W = self.W
+                A = np.copy(W)
+		for i in xrange(iterations):
+			rate = a0 / (1 + sqrt(i))
+			prevnorm = la.norm(W)	
+			for (k, (row, sent)) in enumerate(trainset.items()):
+                                # print 'Iter %d Sample %d' % ( i, k )
+                                untagged = untag(sent)
+				gold = [tag for w, tag in sent]
+				predict = self.viterbi(untagged)
+				if predict != gold:
+					for j, x in enumerate(self.X[k]):
+						# promote gold
+						for featind in x['f'][gold[j]]:
+							W[featind] += rate
+						# demote predicted
+						for featind in x['f'][predict[j]]:
+							W[featind] -= rate
+			curnorm = la.norm(W)
+                        A = add(A, W)
+			# print 'Train: iter ', i, ' prevnorm: ', prevnorm, ' curnorm: ', curnorm, ' del: ', abs(curnorm-prevnorm)
 		self.W = np.copy(A / (iterations * len(self.W)))
-                print 'Training done..'
                 
-        def test(self, testsents, clftype='argmax'):
+
+        def test(self, testsents):
             num = 0 
             numsent = corsent = numword = corword = 0.0
             for row, sent in testsents.items():
                 # print '#', row    
                 untagged = untag(sent)
-                history = self.argmax(untagged)
+                history = self.viterbi(untagged)
                 mistake = False
                 numsent += 1
                 for (i, (word, tag)) in enumerate(sent):
@@ -252,30 +346,22 @@ class StructuredPerceptronTagger(object):
             print 'Sent Acc : ', tweetacc
             return tokenacc, tweetacc
 
-def gridsearch(tagger, trainset, testset):
-
-    iterations = 10
-    tagger.train(trainset)
-    for a0 in xrange(1, 6, 1):
-        for alpha in np.linspace(0.2, 2.0, 10):
-            
-            print '\n---------------------------------------------------------------------'
-            print 'Params: Iter= ', iterations , 'a0= ', a0, 'alpha= ', alpha
-            tagger.sgd(iterations, a0, alpha)
-#            tagger.test(testset)
-
 def main():
-	print "Structured Perceptron based POS-TAGGER"
+	print "----------- Structured Perceptron POS-TAGGER ---------- "
 	tagger = StructuredPerceptronTagger()
 	trainset = read_data("oct27.train")	
 	devset = read_data("oct27.dev")
         testset = read_data("oct27.test")
         
-        tagger.train(trainset, 10)
+        tagger.train(trainset)
+        
+        print '----------- Dev Set Results ----------------- ' 
         tagger.test(devset)
-        tagger.test(testset)
 
-        # gridsearch(tagger, trainset, devset)
+        print '----------- Test Set Results ---------------- '
+        
+        tagger.test(testset)
+        
 
 
 if __name__ == "__main__":
